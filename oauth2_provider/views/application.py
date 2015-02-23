@@ -12,6 +12,7 @@ class ApplicationOwnerIsUserMixin(LoginRequiredMixin):
     This mixin is used to provide an Application queryset filtered by the current request.user.
     """
     model = get_application_model()
+    queryset = model.objects
     fields = '__all__'
 
     def get_queryset(self):
