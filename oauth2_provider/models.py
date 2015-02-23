@@ -1,19 +1,14 @@
 from __future__ import unicode_literals
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.urlresolvers import reverse
 from django.utils import timezone
-try:
-    # Django's new application loading system
-    from django.apps import apps
-    get_model = apps.get_model
-except ImportError:
-    from django.db.models import get_model
-from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import python_2_unicode_compatible
-from django.core.exceptions import ImproperlyConfigured
+from django.utils.translation import ugettext_lazy as _
 
 from mongoengine import (ReferenceField, StringField, BooleanField,
     Document, DateTimeField)
+from mongodbforms.util import import_by_path
 
 from .settings import oauth2_settings
 from .compat import AUTH_USER_MODEL, parse_qsl, urlparse
@@ -240,12 +235,7 @@ class AccessToken(Document):
 
 def get_application_model():
     """ Return the Application model that is active in this project. """
-    try:
-        app_label, model_name = oauth2_settings.APPLICATION_MODEL.split('.')
-    except ValueError:
-        e = "APPLICATION_MODEL must be of the form 'app_label.model_name'"
-        raise ImproperlyConfigured(e)
-    app_model = get_model(app_label, model_name)
+    app_model = import_by_path(oauth2_settings.APPLICATION_MODEL)
     if app_model is None:
         e = "APPLICATION_MODEL refers to model {0} that has not been installed"
         raise ImproperlyConfigured(e.format(oauth2_settings.APPLICATION_MODEL))
