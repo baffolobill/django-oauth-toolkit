@@ -111,8 +111,8 @@ class Application(Document):
         from django.core.exceptions import ValidationError
         if not self.redirect_uris \
             and self.authorization_grant_type \
-            in (AbstractApplication.GRANT_AUTHORIZATION_CODE,
-                AbstractApplication.GRANT_IMPLICIT):
+            in (Application.GRANT_AUTHORIZATION_CODE,
+                Application.GRANT_IMPLICIT):
             error = _('Redirect_uris could not be empty with {0} grant_type')
             raise ValidationError(error.format(self.authorization_grant_type))
 
