@@ -11,7 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from oauthlib.oauth2 import RequestValidator
 
 from .compat import unquote_plus
-from .models import Grant, AccessToken, RefreshToken, get_application_model
+from .models import Grant, AccessToken, get_application_model
 from .settings import oauth2_settings
 
 Application = get_application_model()
@@ -192,6 +192,9 @@ class OAuth2Validator(RequestValidator):
     def invalidate_authorization_code(self, client_id, code, request, *args, **kwargs):
         """
         Remove the temporary grant used to swap the authorization token
+
+        TODO:
+        - why wasn't used ".filter().delete()"?
         """
         grant = Grant.objects.get(code=code, application=request.client)
         grant.delete()
@@ -287,8 +290,11 @@ class OAuth2Validator(RequestValidator):
         if request.refresh_token:
             # remove used refresh token
             try:
-                RefreshToken.objects.get(token=request.refresh_token).delete()
-            except RefreshToken.DoesNotExist:
+                atok = AccessToken.objects.get(refresh_token=request.refresh_token)
+                atok.refresh_token = ''
+                atok.save()
+
+            except AccessToken.DoesNotExist:
                 assert()  # TODO though being here would be very strange, at least log the error
 
         expires = timezone.now() + timedelta(seconds=oauth2_settings.ACCESS_TOKEN_EXPIRE_SECONDS)
@@ -301,16 +307,11 @@ class OAuth2Validator(RequestValidator):
             expires=expires,
             token=token['access_token'],
             application=request.client)
-        access_token.save()
 
         if 'refresh_token' in token:
-            refresh_token = RefreshToken(
-                user=request.user,
-                token=token['refresh_token'],
-                application=request.client,
-                access_token=access_token
-            )
-            refresh_token.save()
+            access_token.refresh_token = token['refresh_token']
+
+        access_token.save()
 
         # TODO check out a more reliable way to communicate expire time to oauthlib
         token['expires_in'] = oauth2_settings.ACCESS_TOKEN_EXPIRE_SECONDS
@@ -326,17 +327,10 @@ class OAuth2Validator(RequestValidator):
         if token_type_hint not in ['access_token', 'refresh_token']:
             token_type_hint = None
 
-        token_types = {
-            'access_token': AccessToken,
-            'refresh_token': RefreshToken,
-        }
-
-        token_type = token_types.get(token_type_hint, AccessToken)
-        try:
-            token_type.objects.get(token=token).delete()
-        except ObjectDoesNotExist:
-            for other_type in [_t for _t in token_types.values() if _t != token_type]:
-                other_type.objects.filter(token=token).delete()
+        if token_type_hint == 'refresh_token':
+            AccessToken.objects.filter(refresh_token=token).update(refresh_token='')
+        elif token_type_hint == 'access_token' or token_type_hint is None:
+            AccessToken.objects.filter(token=token).delete()
 
     def validate_user(self, username, password, client, request, *args, **kwargs):
         """
@@ -349,10 +343,10 @@ class OAuth2Validator(RequestValidator):
         return False
 
     def get_original_scopes(self, refresh_token, request, *args, **kwargs):
-        # Avoid second query for RefreshToken since this method is invoked *after*
+        # Avoid second query for AccessToken since this method is invoked *after*
         # validate_refresh_token.
-        rt = request.refresh_token_instance
-        return rt.access_token.scope
+        rt = request.access_token_instance
+        return rt.scope
 
     def validate_refresh_token(self, refresh_token, client, request, *args, **kwargs):
         """
@@ -360,12 +354,12 @@ class OAuth2Validator(RequestValidator):
         Also attach User instance to the request object
         """
         try:
-            rt = RefreshToken.objects.get(token=refresh_token)
+            rt = AccessToken.objects.get(refresh_token=refresh_token)
             request.user = rt.user
-            request.refresh_token = rt.token
-            # Temporary store RefreshToken instance to be reused by get_original_scopes.
-            request.refresh_token_instance = rt
+            request.refresh_token = rt.refresh_token
+            # Temporary store AccessToken instance to be reused by get_original_scopes.
+            request.access_token_instance = rt
             return rt.application == client
 
-        except RefreshToken.DoesNotExist:
+        except AccessToken.DoesNotExist:
             return False

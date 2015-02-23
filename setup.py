@@ -48,6 +48,8 @@ setup(
         'django-braces>=1.2.2',
         'oauthlib>=0.6.2',
         'six',
+        'mongodbforms',
+        'mongoengine>=0.8.6',
     ],
     zip_safe=False,
 )

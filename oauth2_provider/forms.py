@@ -1,15 +1,16 @@
 from django import forms
 
+from mongodbforms import DocumentForm, MongoCharField
 from .models import get_application_model
 
 
 class AllowForm(forms.Form):
     allow = forms.BooleanField(required=False)
-    redirect_uri = forms.CharField(widget=forms.HiddenInput())
-    scope = forms.CharField(required=False, widget=forms.HiddenInput())
-    client_id = forms.CharField(widget=forms.HiddenInput())
-    state = forms.CharField(required=False, widget=forms.HiddenInput())
-    response_type = forms.CharField(widget=forms.HiddenInput())
+    redirect_uri = MongoCharField(widget=forms.HiddenInput())
+    scope = MongoCharField(required=False, widget=forms.HiddenInput())
+    client_id = MongoCharField(widget=forms.HiddenInput())
+    state = MongoCharField(required=False, widget=forms.HiddenInput())
+    response_type = MongoCharField(widget=forms.HiddenInput())
 
     def __init__(self, *args, **kwargs):
         data = kwargs.get('data')
@@ -19,7 +20,7 @@ class AllowForm(forms.Form):
         return super(AllowForm, self).__init__(*args, **kwargs)
 
 
-class RegistrationForm(forms.ModelForm):
+class RegistrationForm(DocumentForm):
     """
     TODO: add docstring
     """

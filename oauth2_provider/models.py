@@ -1,7 +1,6 @@
 from __future__ import unicode_literals
 
 from django.core.urlresolvers import reverse
-from django.db import models
 from django.utils import timezone
 try:
     # Django's new application loading system
@@ -13,6 +12,9 @@ from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import python_2_unicode_compatible
 from django.core.exceptions import ImproperlyConfigured
 
+from mongoengine import (ReferenceField, StringField, BooleanField,
+    Document, DateTimeField)
+
 from .settings import oauth2_settings
 from .compat import AUTH_USER_MODEL, parse_qsl, urlparse
 from .generators import generate_client_secret, generate_client_id
@@ -20,7 +22,7 @@ from .validators import validate_uris
 
 
 @python_2_unicode_compatible
-class AbstractApplication(models.Model):
+class Application(Document):
     """
     An Application instance represents a Client on the Authorization server.
     Usually an Application is created manually by client's developers after
@@ -58,22 +60,23 @@ class AbstractApplication(models.Model):
         (GRANT_CLIENT_CREDENTIALS, _('Client credentials')),
     )
 
-    client_id = models.CharField(max_length=100, unique=True,
-                                 default=generate_client_id, db_index=True)
-    user = models.ForeignKey(AUTH_USER_MODEL, related_name="%(app_label)s_%(class)s")
-    help_text = _("Allowed URIs list, space separated")
-    redirect_uris = models.TextField(help_text=help_text,
-                                     validators=[validate_uris], blank=True)
-    client_type = models.CharField(max_length=32, choices=CLIENT_TYPES)
-    authorization_grant_type = models.CharField(max_length=32,
-                                                choices=GRANT_TYPES)
-    client_secret = models.CharField(max_length=255, blank=True,
-                                     default=generate_client_secret, db_index=True)
-    name = models.CharField(max_length=255, blank=True)
-    skip_authorization = models.BooleanField(default=False)
+    client_id = StringField(max_length=100, unique=True, default=generate_client_id)
+    user = ReferenceField(AUTH_USER_MODEL)
+    redirect_uris = StringField(help_text=_("Allowed URIs list, space separated"),
+                                validators=[validate_uris])
+    client_type = StringField(max_length=32, choices=CLIENT_TYPES)
+    authorization_grant_type = StringField(max_length=32, choices=GRANT_TYPES)
+    client_secret = StringField(max_length=255, null=True,
+                                default=generate_client_secret)
+    name = StringField(max_length=255, null=True)
+    skip_authorization = BooleanField(default=False)
 
-    class Meta:
-        abstract = True
+    meta = {
+        'indexes': [
+            'client_id',
+            'client_secret',
+        ]
+    }
 
     @property
     def default_redirect_uri(self):
@@ -126,15 +129,9 @@ class AbstractApplication(models.Model):
         return self.name or self.client_id
 
 
-class Application(AbstractApplication):
-    pass
-
-# Add swappable like this to not break django 1.4 compatibility
-Application._meta.swappable = 'OAUTH2_PROVIDER_APPLICATION_MODEL'
-
 
 @python_2_unicode_compatible
-class Grant(models.Model):
+class Grant(Document):
     """
     A Grant instance represents a token with a short lifetime that can
     be swapped for an access token, as described in :rfc:`4.1.2`
@@ -149,12 +146,18 @@ class Grant(models.Model):
     * :attr:`redirect_uri` Self explained
     * :attr:`scope` Required scopes, optional
     """
-    user = models.ForeignKey(AUTH_USER_MODEL)
-    code = models.CharField(max_length=255, db_index=True)  # code comes from oauthlib
-    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
-    expires = models.DateTimeField()
-    redirect_uri = models.CharField(max_length=255)
-    scope = models.TextField(blank=True)
+    user = ReferenceField(AUTH_USER_MODEL)
+    code = StringField(max_length=255)  # code comes from oauthlib
+    application = ReferenceField(oauth2_settings.APPLICATION_MODEL)
+    expires = DateTimeField()
+    redirect_uri = StringField(max_length=255)
+    scope = StringField()
+
+    meta = {
+        'indexes': [
+            'code',
+        ]
+    }
 
     def is_expired(self):
         """
@@ -170,7 +173,7 @@ class Grant(models.Model):
 
 
 @python_2_unicode_compatible
-class AccessToken(models.Model):
+class AccessToken(Document):
     """
     An AccessToken instance represents the actual access token to
     access user's resources, as in :rfc:`5`.
@@ -183,12 +186,22 @@ class AccessToken(models.Model):
     * :attr:`expires` Expire time in seconds, defaults to
                       :data:`settings.ACCESS_TOKEN_EXPIRE_SECONDS`
     * :attr:`scope` Allowed scopes
+    * :attr:`refresh_token` A refresh_token represents a token that can be swapped for a new
+    access token when it expires.
     """
-    user = models.ForeignKey(AUTH_USER_MODEL)
-    token = models.CharField(max_length=255, db_index=True)
-    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
-    expires = models.DateTimeField()
-    scope = models.TextField(blank=True)
+    user = ReferenceField(AUTH_USER_MODEL)
+    token = StringField(max_length=255)
+    application = ReferenceField(oauth2_settings.APPLICATION_MODEL)
+    expires = DateTimeField()
+    scope = StringField()
+    refresh_token = StringField(max_length=255)
+
+    meta = {
+        'indexes': [
+            'token',
+            'refresh_token',
+        ]
+    }
 
     def is_valid(self, scopes=None):
         """
@@ -217,30 +230,6 @@ class AccessToken(models.Model):
         resource_scopes = set(scopes)
 
         return resource_scopes.issubset(provided_scopes)
-
-    def __str__(self):
-        return self.token
-
-
-@python_2_unicode_compatible
-class RefreshToken(models.Model):
-    """
-    A RefreshToken instance represents a token that can be swapped for a new
-    access token when it expires.
-
-    Fields:
-
-    * :attr:`user` The Django user representing resources' owner
-    * :attr:`token` Token value
-    * :attr:`application` Application instance
-    * :attr:`access_token` AccessToken instance this refresh token is
-                           bounded to
-    """
-    user = models.ForeignKey(AUTH_USER_MODEL)
-    token = models.CharField(max_length=255, db_index=True)
-    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
-    access_token = models.OneToOneField(AccessToken,
-                                        related_name='refresh_token')
 
     def __str__(self):
         return self.token
