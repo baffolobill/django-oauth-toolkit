@@ -13,7 +13,7 @@ class ApplicationOwnerIsUserMixin(LoginRequiredMixin):
     """
     model = get_application_model()
     queryset = model.objects
-    fields = '__all__'
+    fields = ('name', 'client_id', 'client_secret', 'client_type', 'authorization_grant_type', 'redirect_uris')
 
     def get_queryset(self):
         return self.model.objects(user=self.request.user)
@@ -60,5 +60,6 @@ class ApplicationUpdate(ApplicationOwnerIsUserMixin, UpdateView):
     """
     View used to update an application owned by the request.user
     """
+    form_class = RegistrationForm
     context_object_name = 'application'
     template_name = "oauth2_provider/application_form.html"
