@@ -25,5 +25,5 @@ class RegistrationForm(DocumentForm):
     TODO: add docstring
     """
     class Meta:
-        model = get_application_model()
+        document = get_application_model()
         fields = ('name', 'client_id', 'client_secret', 'client_type', 'authorization_grant_type', 'redirect_uris')
