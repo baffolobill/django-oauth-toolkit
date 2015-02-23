@@ -16,8 +16,7 @@ class ApplicationOwnerIsUserMixin(LoginRequiredMixin):
     fields = '__all__'
 
     def get_queryset(self):
-        queryset = super(ApplicationOwnerIsUserMixin, self).get_queryset()
-        return queryset.filter(user=self.request.user)
+        return self.model.objects(user=self.request.user)
 
 
 class ApplicationRegistration(LoginRequiredMixin, CreateView):
