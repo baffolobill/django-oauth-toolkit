@@ -62,8 +62,7 @@ class Application(Document):
 
     client_id = StringField(max_length=100, unique=True, default=generate_client_id)
     user = ReferenceField(AUTH_USER_MODEL)
-    redirect_uris = StringField(help_text=_("Allowed URIs list, space separated"),
-                                validators=[validate_uris])
+    redirect_uris = StringField(help_text=_("Allowed URIs list, space separated"))
     client_type = StringField(max_length=32, choices=CLIENT_TYPES)
     authorization_grant_type = StringField(max_length=32, choices=GRANT_TYPES)
     client_secret = StringField(max_length=255, null=True,
@@ -121,6 +120,10 @@ class Application(Document):
                 AbstractApplication.GRANT_IMPLICIT):
             error = _('Redirect_uris could not be empty with {0} grant_type')
             raise ValidationError(error.format(self.authorization_grant_type))
+
+        # mongoengine doesn't support per field validation
+        # so that do it here
+        validate_uris(self.redirect_uris)
 
     def get_absolute_url(self):
         return reverse('oauth2_provider:detail', args=[str(self.id)])
